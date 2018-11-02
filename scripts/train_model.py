@@ -187,17 +187,17 @@ def main(train_file,
         os.makedirs(target_dir)
 
     # -------------------- Data loading ------------------- #
-    print("\t* Loading training data...")
+    print("\t* Loading training data %s ..." % train_file)
     with open(train_file, 'rb') as pkl:
-        train_data = NLIDataset(pickle.load(pkl))
+        train_data = NLIDataset(pickle.load(pkl), max_premise_length= 100,max_hypothesis_length=12)
 
     train_loader = DataLoader(train_data, shuffle=True, batch_size=batch_size)
 
     print("\t* Loading validation data...")
     with open(valid_file, 'rb') as pkl:
-        valid_data = NLIDataset(pickle.load(pkl))
+        valid_data = NLIDataset(pickle.load(pkl),  max_premise_length= 100,max_hypothesis_length=12)
 
-    valid_loader = DataLoader(valid_data, shuffle=False, batch_size=batch_size)
+    valid_loader = DataLoader(valid_data, shuffle=False, batch_size=batch_size )
 
     # -------------------- Model definition ------------------- #
     print('\t* Building model...')
@@ -230,6 +230,7 @@ def main(train_file,
     valid_losses = []
 
     # Continuing training from a checkpoint if one was given as argument.
+    print( checkpoint)
     if checkpoint:
         checkpoint = torch.load(checkpoint)
         start_epoch = checkpoint['epoch'] + 1
@@ -318,14 +319,15 @@ def main(train_file,
             break
 
     # Plotting of the loss curves for the train and validation sets.
-    plt.figure()
-    plt.plot(epochs_count, train_losses, '-r')
-    plt.plot(epochs_count, valid_losses, '-b')
-    plt.xlabel('epoch')
-    plt.ylabel('loss')
-    plt.legend(['Training loss', 'Validation loss'])
-    plt.title('Cross entropy loss')
-    plt.show()
+   # plt.figure()
+   # plt.plot(epochs_count, train_losses, '-r')
+   # plt.plot(epochs_count, valid_losses, '-b')
+   # plt.xlabel('epoch')
+   # plt.ylabel('loss')
+   # plt.legend(['Training loss', 'Validation loss'])
+   # plt.title('Cross entropy loss')
+   # plt.savefig('loss_all.png')
+    open('tmp.loss', 'w').write( json.dumps({'train':train_losses,'valid':valid_losses}) + '\n')
 
 
 if __name__ == "__main__":

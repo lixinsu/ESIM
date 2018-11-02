@@ -8,6 +8,7 @@ import pickle
 import string
 import fnmatch
 import json
+import ipdb
 import numpy as np
 from collections import Counter
 
@@ -71,6 +72,19 @@ def read_data(filepath, lowercase=False, ignore_punctuation=False):
         return {"premises": premises,
                 "hypotheses": hypotheses,
                 "labels": labels}
+
+
+def read_data_sogou(filepath, **kwargs):
+    premises, hypotheses, labels = [], [], []
+    with open(filepath) as fin:
+        for line in fin:
+            data = json.loads(line)
+            premises.append(data['passage'])
+            hypotheses.append(data['question'])
+            labels.append(data['label'])
+    return {"premises": premises,
+            "hypotheses": hypotheses,
+            "labels": labels}
 
 
 def build_worddict(data, num_words=None):
@@ -160,6 +174,7 @@ def transform_to_indices(data, worddict, labeldict):
         # defined in 'labeldict'.
         label = data["labels"][i]
         if label not in labeldict:
+            print('error label')
             continue
 
         transformed_data["labels"].append(labeldict[label])
@@ -188,14 +203,15 @@ def build_embedding_matrix(worddict, embeddings_file):
     """
     # Load the word embeddings in a dictionnary.
     embeddings = {}
-    with open(embeddings_file, 'r', encoding='utf8') as input_data:
+    seen_word = 0
+    with open(embeddings_file, 'r', errors="ignore") as input_data:
         for line in input_data:
-            line = line.split()
+            line = line.rstrip().split(' ')
 
             try:
                 # Check that the second element on the line is the start
                 # of the embedding and not another word. Necessary to
-                # ignore multiple word lines. 
+                # ignore multiple word lines.
                 float(line[1])
                 word = line[0]
                 if word in worddict:
@@ -204,15 +220,17 @@ def build_embedding_matrix(worddict, embeddings_file):
             # Ignore lines corresponding to multiple words separated
             # by spaces.
             except ValueError:
+                print('error')
                 continue
 
     num_words = len(worddict)
     embedding_dim = len(list(embeddings.values())[0])
     embedding_matrix = np.zeros((num_words, embedding_dim))
-
+    print('num_words: %s, emb_dim: %s' % (num_words, embedding_dim))
     # Actual building of the embedding matrix.
     for word, i in worddict.items():
         if word in embeddings:
+            seen_word += 1
             embedding_matrix[i] = np.array(embeddings[word], dtype=float)
         else:
             if word == "_PAD_":
@@ -220,7 +238,7 @@ def build_embedding_matrix(worddict, embeddings_file):
             # Out of vocabulary words are initialised with random gaussian
             # samples.
             embedding_matrix[i] = np.random.normal(size=(embedding_dim))
-
+    print('share words: %s' % seen_word)
     return embedding_matrix
 
 
@@ -229,7 +247,8 @@ def preprocess_NLI_data(inputdir,
                         targetdir,
                         lowercase=False,
                         ignore_punctuation=False,
-                        num_words=None):
+                        num_words=None,
+                        datatype='NLI'):
     """
     Preprocess the data from some NLI corpus so it can be used by the
     ESIM model.
@@ -260,28 +279,43 @@ def preprocess_NLI_data(inputdir,
     dev_file = ""
     test_file = ""
     for file in os.listdir(inputdir):
-        if fnmatch.fnmatch(file, '*_train.txt'):
+        print(file)
+        if fnmatch.fnmatch(file, '*-train.*'):
             train_file = file
-        elif fnmatch.fnmatch(file, '*_dev.txt'):
+        elif fnmatch.fnmatch(file, '*-dev.*'):
             dev_file = file
-        elif fnmatch.fnmatch(file, '*_test.txt'):
+        elif fnmatch.fnmatch(file, '*-test.*'):
             test_file = file
 
     # -------------------- Train data preprocessing -------------------- #
     print(20*"=", " Preprocessing train set ", 20*"=")
     print("\t* Reading data...")
-    data = read_data(os.path.join(inputdir, train_file),
-                     lowercase=lowercase,
-                     ignore_punctuation=ignore_punctuation)
-
+    if datatype == "NLI":
+        data = read_data(os.path.join(inputdir, train_file),
+                         lowercase=lowercase,
+                         ignore_punctuation=ignore_punctuation)
+    elif datatype == 'Sogou':
+        data = read_data_sogou(os.path.join(inputdir, train_file),
+                               lowercase=False,
+                               ignore_punctuation=False
+                               )
+    else:
+        raise NotImplementedError
     print("\t* Computing worddict and saving it...")
     worddict = build_worddict(data, num_words=num_words)
     with open(os.path.join(targetdir, "worddict.pkl"), 'wb') as pkl_file:
         pickle.dump(worddict, pkl_file)
 
     print("\t* Transforming words in premises and hypotheses to indices...")
-    labeldict = {"entailment": 0, "neutral": 1, "contradiction": 2}
+    if datatype == 'NLI':
+        labeldict = {"entailment": 0, "neutral": 1, "contradiction": 2}
+    elif datatype == 'Sogou':
+        labeldict = {0: 0, 1: 1}
+    else:
+        raise NotImplementedError
+
     transformed_data = transform_to_indices(data, worddict, labeldict)
+    print(len(transformed_data))
     print("\t* Saving result...")
     with open(os.path.join(targetdir, "train_data.pkl"), 'wb') as pkl_file:
         pickle.dump(transformed_data, pkl_file)
@@ -289,9 +323,17 @@ def preprocess_NLI_data(inputdir,
     # -------------------- Validation data preprocessing -------------------- #
     print(20*"=", " Preprocessing dev set ", 20*"=")
     print("\t* Reading data...")
-    data = read_data(os.path.join(inputdir, dev_file),
-                     lowercase=lowercase,
-                     ignore_punctuation=ignore_punctuation)
+    if datatype == "NLI":
+        data = read_data(os.path.join(inputdir, dev_file),
+                         lowercase=lowercase,
+                         ignore_punctuation=ignore_punctuation)
+    elif datatype == 'Sogou':
+        data = read_data_sogou(os.path.join(inputdir, dev_file),
+                               lowercase=False,
+                               ignore_punctuation=False
+                               )
+    else:
+        raise NotImplementedError
 
     print("\t* Transforming words in premises and hypotheses to indices...")
     transformed_data = transform_to_indices(data, worddict, labeldict)
@@ -302,9 +344,18 @@ def preprocess_NLI_data(inputdir,
     # -------------------- Test data preprocessing -------------------- #
     print(20*"=", " Preprocessing test set ", 20*"=")
     print("\t* Reading data...")
-    data = read_data(os.path.join(inputdir, test_file),
-                     lowercase=lowercase,
-                     ignore_punctuation=ignore_punctuation)
+
+    if datatype == "NLI":
+        data = read_data(os.path.join(inputdir, test_file),
+                         lowercase=lowercase,
+                         ignore_punctuation=ignore_punctuation)
+    elif datatype == 'Sogou':
+        data = read_data_sogou(os.path.join(inputdir, test_file),
+                               lowercase=False,
+                               ignore_punctuation=False
+                               )
+    else:
+        raise NotImplementedError
 
     print("\t* Transforming words in premises and hypotheses to indices...")
     transformed_data = transform_to_indices(data, worddict, labeldict)
@@ -337,4 +388,6 @@ if __name__ == "__main__":
                         os.path.normpath(config["target_dir"]),
                         lowercase=config["lowercase"],
                         ignore_punctuation=config["ignore_punctuation"],
-                        num_words=config["num_words"])
+                        num_words=config["num_words"],
+                        datatype=config.get('datatype', 'NLI')
+                        )
