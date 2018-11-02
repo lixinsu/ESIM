@@ -57,6 +57,7 @@ class ESIM(nn.Module):
                                             padding_idx=padding_idx,
                                             _weight=embeddings)
 
+        self._word_embedding.weight.requires_grad = False
         if self.dropout:
             self._rnn_dropout = RNNDropout(p=self.dropout)
             # self._rnn_dropout = nn.Dropout(p=self.dropout)
