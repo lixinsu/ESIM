@@ -1,0 +1,17 @@
+{
+    "train_data": "../data/preprocessed/sogou_partial/train_data.pkl",
+    "valid_data": "../data/preprocessed/sogou_partial/dev_data.pkl",
+    "embeddings": "../data/preprocessed/sogou_partial/embeddings.pkl",
+
+    "target_dir": "../data/checkpoints/sogou_partial10000",
+
+    "hidden_size": 200,
+    "dropout": 0.5,
+    "num_classes": 2,
+
+    "epochs": 64,
+    "batch_size": 32,
+    "patience": 5,
+    "max_gradient_norm": 10.0,
+    "tune_partial": 10000
+}

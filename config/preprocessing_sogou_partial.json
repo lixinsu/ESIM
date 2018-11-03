@@ -1,0 +1,10 @@
+{
+    "data_dir": "../data/dataset/sogou",
+    "embeddings_file": "../data/embeddings/word_embedding",
+    "target_dir": "../data/preprocessed/sogou_partial",
+
+    "lowercase": false,
+    "ignore_punctuation": false,
+    "num_words": null,
+    "datatype": "Sogou",
+}

@@ -91,6 +91,7 @@ def build_worddict(data, num_words=None):
     """
     Build a dictionary associating words from a set of premises and
     hypotheses to unique integer indices.
+    Update: we put the most common word in hypotheses
 
     Args:
         data: A dictionary containing the premises and hypotheses for which
@@ -106,21 +107,26 @@ def build_worddict(data, num_words=None):
         A dictionary associating words to integer indices.
     """
     words = []
-    [words.extend(sentence) for sentence in data['premises']]
     [words.extend(sentence) for sentence in data['hypotheses']]
-
     counts = Counter(words)
     if num_words is None:
         num_words = len(counts)
 
     worddict = {word[0]: i+4
                 for i, word in enumerate(counts.most_common(num_words))}
-    # Special indices are used for padding, out-of-vocabulary words, and
-    # beginning and end of sentence tokens.
+
     worddict["_PAD_"] = 0
     worddict["_OOV_"] = 1
     worddict["_BOS_"] = 2
     worddict["_EOS_"] = 3
+    open('tmp_question_word.pkl', 'w').write(json.dumps(worddict))
+
+    # Special indices are used for padding, out-of-vocabulary words, and
+    # beginning and end of sentence tokens.
+    [words.extend(sentence) for sentence in data['premises']]
+    for word in words:
+        if word not in worddict:
+            worddict[word] = len(worddict)
 
     return worddict
 

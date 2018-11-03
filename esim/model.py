@@ -24,7 +24,8 @@ class ESIM(nn.Module):
                  padding_idx=0,
                  dropout=0.5,
                  num_classes=3,
-                 device="cpu"):
+                 device="cpu",
+                 tune_partial=0):
         """
         Args:
             vocab_size: The size of the vocabulary of embeddings in the model.
@@ -51,12 +52,16 @@ class ESIM(nn.Module):
         self.num_classes = num_classes
         self.dropout = dropout
         self.device = device
+        self.tune_partial = tune_partial
 
         self._word_embedding = nn.Embedding(self.vocab_size,
                                             self.embedding_dim,
                                             padding_idx=padding_idx,
                                             _weight=embeddings)
-
+        if self.tune_partial > 0:
+            self.register_buffer(
+                'fixed_embedding', self._word_embedding.weight.data[self.tune_partial + 1:].clone()
+            )
         if self.dropout:
             self._rnn_dropout = RNNDropout(p=self.dropout)
             # self._rnn_dropout = nn.Dropout(p=self.dropout)
@@ -87,6 +92,20 @@ class ESIM(nn.Module):
 
         # Initialize all weights and biases in the model.
         self.apply(_init_esim_weights)
+
+    def reset_parameters(self):
+        """Reset any partially fixed parameters to original states."""
+
+        # Reset fixed embeddings to original value
+        if self.tune_partial > 0:
+
+            embedding = self._word_embedding.weight.data
+            fixed_embedding = self.fixed_embedding
+
+            # Embeddings to fix are the last indices
+            offset = embedding.size(0) - fixed_embedding.size(0)
+            if offset >= 0:
+                embedding[offset:] = fixed_embedding
 
     def forward(self,
                 premises,

@@ -66,10 +66,6 @@ def test(model, dataloader):
 
 def main(test_file,
          pretrained_file,
-         vocab_size,
-         embedding_dim,
-         hidden_size=300,
-         num_classes=3,
          batch_size=32):
     """
     Test the ESIM model with pretrained weights on some dataset.
@@ -78,13 +74,6 @@ def main(test_file,
         test_file: The path to a file containing preprocessed NLI data.
         pretrained_file: The path to a checkpoint produced by the
             'train_model' script.
-        vocab_size: The number of words in the vocabulary of the model
-            being tested.
-        embedding_dim: The size of the embeddings in the model.
-        hidden_size: The size of the hidden layers in the model. Must match
-            the size used during training. Defaults to 300.
-        num_classes: The number of classes in the output of the model. Must
-            match the value used during training. Defaults to 3.
         batch_size: The size of the batches used for testing. Defaults to 32.
     """
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -93,18 +82,24 @@ def main(test_file,
 
     print("\t* Loading test data...")
     with open(test_file, 'rb') as pkl:
-        test_data = NLIDataset(pickle.load(pkl))
-
+        test_data = NLIDataset(pickle.load(pkl), max_premise_length=100, max_hypothesis_length=12)
+    print('\t* Number of data: %s' % len(test_data))
     test_loader = DataLoader(test_data, shuffle=False, batch_size=batch_size)
 
     print("\t* Building model...")
+    # hacking the model
+    checkpoint = torch.load(pretrained_file)
+    vocab_size, embedding_dim = checkpoint['model']['_word_embedding.weight'].size()
+    num_classes = 2
+    hidden_size = 200
+
     model = ESIM(vocab_size,
                  embedding_dim,
                  hidden_size,
                  num_classes=num_classes,
                  device=device).to(device)
-
-    checkpoint = torch.load(pretrained_file)
+    if 'fixed_embedding' in checkpoint['model']:
+        checkpoint['model'].pop('fixed_embedding')
     model.load_state_dict(checkpoint['model'])
 
     print(20 * "=",
@@ -119,19 +114,14 @@ def main(test_file,
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Test the ESIM model on\
  some dataset')
-    parser.add_argument('checkpoint',
+    parser.add_argument('--checkpoint',
                         help="Path to a checkpoint with a pretrained model")
-    parser.add_argument('--config', default='../config/test.json',
-                        help='Path to a configuration file')
+    parser.add_argument('--batch-size', default=32,
+                        help='Batch size for test')
+    parser.add_argument('--test-data', default='../config/test.json',
+                        help='Path to a test file')
     args = parser.parse_args()
 
-    with open(os.path.normpath(args.config), 'r') as config_file:
-        config = json.load(config_file)
-
-    main(os.path.normpath(config['test_data']),
+    main(os.path.normpath(args.test_data),
          args.checkpoint,
-         config['vocab_size'],
-         config['embedding_dim'],
-         config['hidden_size'],
-         config['num_classes'],
-         config['batch_size'])
+         batch_size=args.batch_size)

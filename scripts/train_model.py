@@ -9,6 +9,7 @@ import time
 import pickle
 import torch
 import json
+import copy
 
 import matplotlib.pyplot as plt
 import torch.nn as nn
@@ -26,7 +27,8 @@ def train(model,
           optimizer,
           criterion,
           epoch_number,
-          max_gradient_norm):
+          max_gradient_norm,
+          tune_partial=0):
     """
     Train a model for one epoch on some input data with a given optimizer and
     criterion.
@@ -75,6 +77,9 @@ def train(model,
 
         nn.utils.clip_grad_norm_(model.parameters(), max_gradient_norm)
         optimizer.step()
+
+        if tune_partial > 0:
+            model.reset_parameters()
 
         batch_time_avg += time.time() - batch_start
         running_loss += loss.item()
@@ -155,7 +160,9 @@ def main(train_file,
          batch_size=32,
          patience=5,
          max_grad_norm=10.0,
-         checkpoint=None):
+         checkpoint=None,
+         fix_embedding = False,
+         tune_partial=0):
     """
     Train the ESIM model on some dataset.
 
@@ -189,15 +196,15 @@ def main(train_file,
     # -------------------- Data loading ------------------- #
     print("\t* Loading training data %s ..." % train_file)
     with open(train_file, 'rb') as pkl:
-        train_data = NLIDataset(pickle.load(pkl), max_premise_length= 100,max_hypothesis_length=12)
+        train_data = NLIDataset(pickle.load(pkl), max_premise_length=100, max_hypothesis_length=12)
 
     train_loader = DataLoader(train_data, shuffle=True, batch_size=batch_size)
 
     print("\t* Loading validation data...")
     with open(valid_file, 'rb') as pkl:
-        valid_data = NLIDataset(pickle.load(pkl),  max_premise_length= 100,max_hypothesis_length=12)
+        valid_data = NLIDataset(pickle.load(pkl), max_premise_length=100, max_hypothesis_length=12)
 
-    valid_loader = DataLoader(valid_data, shuffle=False, batch_size=batch_size )
+    valid_loader = DataLoader(valid_data, shuffle=False, batch_size=batch_size)
 
     # -------------------- Model definition ------------------- #
     print('\t* Building model...')
@@ -211,8 +218,11 @@ def main(train_file,
                  embeddings=embeddings,
                  dropout=dropout,
                  num_classes=num_classes,
-                 device=device).to(device)
+                 device=device,
+                 tune_partial=tune_partial).to(device)
 
+    if fix_embedding:
+        model._word_embedding.weight.requires_grad = False
     # -------------------- Preparation for training  ------------------- #
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.0004)
@@ -230,7 +240,6 @@ def main(train_file,
     valid_losses = []
 
     # Continuing training from a checkpoint if one was given as argument.
-    print( checkpoint)
     if checkpoint:
         checkpoint = torch.load(checkpoint)
         start_epoch = checkpoint['epoch'] + 1
@@ -268,7 +277,8 @@ def main(train_file,
                                                        optimizer,
                                                        criterion,
                                                        epoch,
-                                                       max_grad_norm)
+                                                       max_grad_norm,
+                                                       tune_partial=tune_partial)
 
         train_losses.append(epoch_loss)
         print("-> Training time: {:.4f}s, loss = {:.4f}, accuracy: {:.4f}%"
@@ -296,21 +306,31 @@ def main(train_file,
             # a checkpoint file that is too heavy to be shared. To resume
             # training from the best model, use the 'esim_*.pth.tar'
             # checkpoints instead.
+            state_dict = copy.copy(model.state_dict())
+            if 'fixed_embedding' in state_dict:
+                state_dict.pop('fixed_embedding')
             torch.save({'epoch': epoch,
-                        'model': model.state_dict(),
+                        'model': state_dict,
                         'best_score': best_score,
                         'epochs_count': epochs_count,
                         'train_losses': train_losses,
+                        'num_classes': num_classes,
+                        'hidden_size': hidden_size,
                         'valid_losses': valid_losses},
                        os.path.join(target_dir, "best.pth.tar"))
 
         # Save the model at each epoch.
+        state_dict = copy.copy(model.state_dict())
+        if 'fixed_embedding' in state_dict:
+            state_dict.pop('fixed_embedding')
         torch.save({'epoch': epoch,
-                    'model': model.state_dict(),
+                    'model': state_dict,
                     'best_score': best_score,
                     'optimizer': optimizer.state_dict(),
                     'epochs_count': epochs_count,
                     'train_losses': train_losses,
+                    'num_classes': num_classes,
+                    'hidden_size': hidden_size,
                     'valid_losses': valid_losses},
                    os.path.join(target_dir, "esim_{}.pth.tar".format(epoch)))
 
@@ -327,7 +347,6 @@ def main(train_file,
    # plt.legend(['Training loss', 'Validation loss'])
    # plt.title('Cross entropy loss')
    # plt.savefig('loss_all.png')
-    open('tmp.loss', 'w').write( json.dumps({'train':train_losses,'valid':valid_losses}) + '\n')
 
 
 if __name__ == "__main__":
@@ -343,6 +362,14 @@ if __name__ == "__main__":
     with open(os.path.normpath(args.config), 'r') as config_file:
         config = json.load(config_file)
 
+    # Set default parameters
+    config['fix_embedding'] = config.get('fix_embedding', False)
+    config['tune_partial'] = config.get('tune_partial', 0)
+
+    # Detect conflict in parameters
+    if config['fix_embedding'] and config['tune_partial'] > 0:
+        raise ValueError("If fix embedding, tune_partial must be zero")
+
     main(os.path.normpath(config["train_data"]),
          os.path.normpath(config["valid_data"]),
          os.path.normpath(config["embeddings"]),
@@ -354,4 +381,7 @@ if __name__ == "__main__":
          config["batch_size"],
          config["patience"],
          config["max_gradient_norm"],
-         args.checkpoint)
+         args.checkpoint,
+         fix_embedding=config.get('fix_embedding', False),
+         tune_partial=config.get('tune_partial', 0)
+         )
