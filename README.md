@@ -1,3 +1,11 @@
+The code is modified from [repo](https://github.com/coetaur0/ESIM), Thanks to the author.
+
+Major improvement:
+# support fix embedding or finetune embedding
+# fine tune part of embeddings in hypothese
+# Antomatically inference some parameter from the checkpoint, deprecated the test config.
+
+
 # ESIM - Enhanced Sequential Inference Model
 Implementation of the ESIM model for natural language inference with PyTorch
 
@@ -52,24 +60,5 @@ The *test_model.py* script can be used to test the model on some test data.
 
 Its usage is:
 ```
-test_model.py [-h] [--config CONFIG] checkpoint
+test_model.py [-h]
 ```
-where `config` is a configuration file (again, a default one is available in *config/*) and `checkpoint` is either one of the 
-checkpoints created after the training epochs, or the best model seen during training, which is saved in 
-*data/checkpoints/best.pth.tar* (the difference between the *esim_\*.pth.tar* files and *best.pth.tar* is that the latter cannot
-be used to resume training, as it doesn't contain the optimizer's state).
-
-## Results
-A pretrained model is made available in the *data/checkpoints* folder of this repository. The model was trained with the
-parameters defined in the default configuration files provided in *config/*.
-To test it, simply execute `python test_model.py ../data/checkpoints/best.pth.tar` from within the *scripts/* folder.
-
-The pretrained model achieves the following performance on the SNLI dataset:
-
-| Split | Accuracy (%) |
-|-------|--------------|
-| Train |     93.2     |
-| Dev   |     88.4     |
-| Test  |     88.0     |
-
-The results are in line with those presented in the paper by Chen et al.
