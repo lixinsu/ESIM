@@ -215,7 +215,7 @@ def main(train_file,
 
     # -------------------- Preparation for training  ------------------- #
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=0.0004)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.0004)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
                                                            mode='max',
                                                            factor=0.5,
