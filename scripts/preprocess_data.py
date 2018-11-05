@@ -119,12 +119,14 @@ def build_worddict(data, num_words=None):
     worddict["_OOV_"] = 1
     worddict["_BOS_"] = 2
     worddict["_EOS_"] = 3
-    open('tmp_question_word.pkl', 'w').write(json.dumps(worddict))
+    #open('tmp_question_word.pkl', 'w').write(json.dumps(worddict))
 
     # Special indices are used for padding, out-of-vocabulary words, and
     # beginning and end of sentence tokens.
     [words.extend(sentence) for sentence in data['premises']]
-    for word in words:
+    counts = Counter(words)
+    num_words = len(counts)
+    for word, v in counts.most_common(num_words):
         if word not in worddict:
             worddict[word] = len(worddict)
 
